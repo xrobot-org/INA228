@@ -50,7 +50,7 @@ class INA228 : public LibXR::Application
         shunt_resistor_uohm_(shunt_resistor_uohm == 0 ? 5000 : shunt_resistor_uohm),
         adcrange_div4_(adcrange_div4),
         sample_interval_ms_(sample_interval_ms == 0 ? 1 : sample_interval_ms),
-        topic_data_(data_topic_name, sizeof(data_)),
+        topic_data_(LibXR::Topic::CreateTopic<Data>(data_topic_name)),
         i2c_(hw.template FindOrExit<LibXR::I2C>({i2c_name})),
         op_read_block_(sem_i2c_),
         op_write_block_(sem_i2c_)
