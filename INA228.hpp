@@ -2,31 +2,21 @@
 
 // clang-format off
 /* === MODULE MANIFEST V2 ===
-module_description: XRobot Module for Texas Instruments INA228 digital power monitor sensor
-constructor_args:
-  - i2c_name: "ina228_i2c"
-  - i2c_addr: 64
-  - shunt_resistor_uohm: 5000
-  - adcrange_div4: false
-  - sample_interval_ms: 100
-  - data_topic_name: "ina228_data"
-  - auto_init: true
-template_args: []
-required_hardware:
-  - ina228_i2c
+module_description: XRobot Module for Texas Instruments INA228 digital power monitor
+  sensor
 depends: []
 === END MANIFEST === */
 // clang-format on
 
 #include <cstdint>
+#include <memory>
 
-#include "app_framework.hpp"
 #include "i2c.hpp"
 #include "message.hpp"
 #include "thread.hpp"
 #include "timebase.hpp"
 
-class INA228 : public LibXR::Application
+class INA228
 {
  public:
   struct Data
@@ -42,8 +32,7 @@ class INA228 : public LibXR::Application
     bool valid = false;
   };
 
-  INA228(LibXR::HardwareContainer& hw, LibXR::ApplicationManager& app,
-         const char* i2c_name, uint16_t i2c_addr, uint32_t shunt_resistor_uohm,
+  INA228(LibXR::I2C& external_i2c_name, uint16_t i2c_addr, uint32_t shunt_resistor_uohm,
          bool adcrange_div4, uint32_t sample_interval_ms, const char* data_topic_name,
          bool auto_init)
       : i2c_addr_(static_cast<uint16_t>(i2c_addr & 0x7Fu)),
@@ -51,7 +40,7 @@ class INA228 : public LibXR::Application
         adcrange_div4_(adcrange_div4),
         sample_interval_ms_(sample_interval_ms == 0 ? 1 : sample_interval_ms),
         topic_data_(LibXR::Topic::CreateTopic<Data>(data_topic_name)),
-        i2c_(hw.template FindOrExit<LibXR::I2C>({i2c_name})),
+        i2c_(std::addressof(external_i2c_name)),
         op_read_block_(sem_i2c_),
         op_write_block_(sem_i2c_)
   {
@@ -86,10 +75,9 @@ class INA228 : public LibXR::Application
 
     // 注册到应用管理器，后续由 OnMonitor 周期采样 / Register to the application
     // manager for periodic sampling in OnMonitor.
-    app.Register(*this);
   }
 
-  void OnMonitor() override
+  void OnMonitor()
   {
     const uint32_t NOW_MS = static_cast<uint32_t>(LibXR::Timebase::GetMilliseconds());
     if ((NOW_MS - last_sample_ms_) < sample_interval_ms_)
