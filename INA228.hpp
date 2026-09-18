@@ -32,15 +32,25 @@ class INA228
     bool valid = false;
   };
 
-  INA228(LibXR::I2C& external_i2c_name, uint16_t i2c_addr, uint32_t shunt_resistor_uohm,
-         bool adcrange_div4, uint32_t sample_interval_ms, const char* data_topic_name,
-         bool auto_init)
-      : i2c_addr_(static_cast<uint16_t>(i2c_addr & 0x7Fu)),
-        shunt_resistor_uohm_(shunt_resistor_uohm == 0 ? 5000 : shunt_resistor_uohm),
-        adcrange_div4_(adcrange_div4),
-        sample_interval_ms_(sample_interval_ms == 0 ? 1 : sample_interval_ms),
-        topic_data_(LibXR::Topic::CreateTopic<Data>(data_topic_name)),
-        i2c_(std::addressof(external_i2c_name)),
+  struct Param
+  {
+    uint16_t i2c_addr;
+    uint32_t shunt_resistor_uohm;
+    bool adcrange_div4;
+    uint32_t sample_interval_ms;
+    const char* data_topic_name;
+    bool auto_init;
+  };
+
+  INA228(
+      LibXR::I2C& i2c,
+      const Param& param = {.i2c_addr = 64, .shunt_resistor_uohm = 5000, .adcrange_div4 = false, .sample_interval_ms = 100, .data_topic_name = "ina228_data", .auto_init = true})
+      : i2c_addr_(static_cast<uint16_t>(param.i2c_addr & 0x7Fu)),
+        shunt_resistor_uohm_(param.shunt_resistor_uohm == 0 ? 5000 : param.shunt_resistor_uohm),
+        adcrange_div4_(param.adcrange_div4),
+        sample_interval_ms_(param.sample_interval_ms == 0 ? 1 : param.sample_interval_ms),
+        topic_data_(LibXR::Topic::CreateTopic<Data>(param.data_topic_name)),
+        i2c_(std::addressof(i2c)),
         op_read_block_(sem_i2c_),
         op_write_block_(sem_i2c_)
   {
@@ -57,7 +67,7 @@ class INA228
     energy_lsb_j_ = (CURRENT_LSB_UA_BASE * 3.2f) * 1.0e-6f;
     charge_lsb_c_ = (CURRENT_LSB_UA_BASE / 16.0f) * 1.0e-6f;
 
-    if (auto_init)
+    if (param.auto_init)
     {
       // 构造阶段阻塞重试初始化，失败时软复位后重新探活 / Retry initialization
       // in the constructor; soft-reset and probe again after a failed attempt.
