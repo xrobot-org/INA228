@@ -2,8 +2,7 @@
 
 // clang-format off
 /* === MODULE MANIFEST V2 ===
-module_description: XRobot Module for Texas Instruments INA228 digital power monitor
-  sensor
+module_description: 德州仪器 INA228 数字功率监测芯片（I2C）驱动模块 / Driver Module for the Texas Instruments INA228 digital power monitor over I2C
 depends: []
 === END MANIFEST === */
 // clang-format on
@@ -82,9 +81,6 @@ class INA228
         LibXR::Thread::Sleep(10);
       }
     }
-
-    // 注册到应用管理器，后续由 OnMonitor 周期采样 / Register to the application
-    // manager for periodic sampling in OnMonitor.
   }
 
   void OnMonitor()
