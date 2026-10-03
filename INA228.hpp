@@ -79,11 +79,15 @@ class INA228
    * @param param 配置参数。
    *              Configuration parameters.
    */
-  INA228(
-      LibXR::I2C& i2c,
-      const Param& param = {.i2c_addr = 64, .shunt_resistor_uohm = 5000, .adcrange_div4 = false, .sample_interval_ms = 100, .data_topic_name = "ina228_data", .auto_init = true})
+  INA228(LibXR::I2C& i2c, const Param& param = {.i2c_addr = 64,
+                                                .shunt_resistor_uohm = 5000,
+                                                .adcrange_div4 = false,
+                                                .sample_interval_ms = 100,
+                                                .data_topic_name = "ina228_data",
+                                                .auto_init = true})
       : i2c_addr_(static_cast<uint16_t>(param.i2c_addr & 0x7Fu)),
-        shunt_resistor_uohm_(param.shunt_resistor_uohm == 0 ? 5000 : param.shunt_resistor_uohm),
+        shunt_resistor_uohm_(param.shunt_resistor_uohm == 0 ? 5000
+                                                            : param.shunt_resistor_uohm),
         adcrange_div4_(param.adcrange_div4),
         sample_interval_ms_(param.sample_interval_ms == 0 ? 1 : param.sample_interval_ms),
         topic_data_(LibXR::Topic::CreateTopic<Data>(param.data_topic_name)),
