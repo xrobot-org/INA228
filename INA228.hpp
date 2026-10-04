@@ -2,56 +2,96 @@
 
 // clang-format off
 /* === MODULE MANIFEST V2 ===
-module_description: XRobot Module for Texas Instruments INA228 digital power monitor sensor
-constructor_args:
-  - i2c_name: "ina228_i2c"
-  - i2c_addr: 64
-  - shunt_resistor_uohm: 5000
-  - adcrange_div4: false
-  - sample_interval_ms: 100
-  - data_topic_name: "ina228_data"
-  - auto_init: true
-template_args: []
-required_hardware:
-  - ina228_i2c
+module_description: 德州仪器 INA228 数字功率监测芯片（I2C）驱动模块 / Driver Module for the Texas Instruments INA228 digital power monitor over I2C
 depends: []
 === END MANIFEST === */
 // clang-format on
 
 #include <cstdint>
+#include <memory>
 
-#include "app_framework.hpp"
 #include "i2c.hpp"
 #include "message.hpp"
 #include "thread.hpp"
 #include "timebase.hpp"
 
-class INA228 : public LibXR::Application
+/**
+ * @brief INA228 数字功率监测芯片驱动模块，在 OnMonitor 中采样并发布测量结果。
+ *        Driver Module for the INA228 digital power monitor; it samples in OnMonitor and
+ *        publishes the measurement.
+ */
+class INA228
 {
  public:
+  /**
+   * @brief 发布的测量结果。
+   *        Published measurement.
+   */
   struct Data
   {
-    float shunt_voltage_v = 0.0f;
-    float bus_voltage_v = 0.0f;
-    float current_a = 0.0f;
-    float power_w = 0.0f;
-    float energy_j = 0.0f;
-    float charge_c = 0.0f;
-    float die_temperature_c = 0.0f;
-    uint32_t timestamp_ms = 0;
-    bool valid = false;
+    float shunt_voltage_v = 0.0f;    ///< 分流电压 (V)
+                                     ///< Shunt voltage (V)
+    float bus_voltage_v = 0.0f;      ///< 总线电压 (V)
+                                     ///< Bus voltage (V)
+    float current_a = 0.0f;          ///< 电流 (A)
+                                     ///< Current (A)
+    float power_w = 0.0f;            ///< 功率 (W)
+                                     ///< Power (W)
+    float energy_j = 0.0f;           ///< 复位以来累计的能量 (J)
+                                     ///< Energy accumulated since reset (J)
+    float charge_c = 0.0f;           ///< 复位以来累计的电荷 (C)
+                                     ///< Charge accumulated since reset (C)
+    float die_temperature_c = 0.0f;  ///< 芯片温度 (°C)
+                                     ///< Die temperature (°C)
+    uint32_t timestamp_ms = 0;       ///< 采样时刻 (LibXR::Timebase, ms)
+                                     ///< Sample time (LibXR::Timebase, ms)
+    bool valid = false;              ///< 本次采样有效
+                                     ///< The sample is valid
   };
 
-  INA228(LibXR::HardwareContainer& hw, LibXR::ApplicationManager& app,
-         const char* i2c_name, uint16_t i2c_addr, uint32_t shunt_resistor_uohm,
-         bool adcrange_div4, uint32_t sample_interval_ms, const char* data_topic_name,
-         bool auto_init)
-      : i2c_addr_(static_cast<uint16_t>(i2c_addr & 0x7Fu)),
-        shunt_resistor_uohm_(shunt_resistor_uohm == 0 ? 5000 : shunt_resistor_uohm),
-        adcrange_div4_(adcrange_div4),
-        sample_interval_ms_(sample_interval_ms == 0 ? 1 : sample_interval_ms),
-        topic_data_(LibXR::Topic::CreateTopic<Data>(data_topic_name)),
-        i2c_(hw.template FindOrExit<LibXR::I2C>({i2c_name})),
+  /**
+   * @brief INA228 配置参数。
+   *        INA228 configuration parameters.
+   */
+  struct Param
+  {
+    uint16_t i2c_addr;  ///< 7 位器件地址，不含读写位
+    ///< 7-bit device address without the R/W bit
+    uint32_t shunt_resistor_uohm;  ///< 分流电阻 (µΩ)，0 按 5000 处理
+    ///< Shunt resistance (µΩ); 0 is treated as 5000
+    bool adcrange_div4;  ///< 为 true 时选择 ±40.96 mV 量程，否则为 ±163.84 mV
+    ///< When true, select the ±40.96 mV range, otherwise ±163.84 mV
+    uint32_t sample_interval_ms;  ///< 两次采样的最小间隔 (ms)，0 按 1 处理
+    ///< Minimum interval between two samples (ms); 0 is treated as 1
+    const char* data_topic_name;  ///< 发布测量结果的 Topic 名称
+    ///< Name of the Topic that publishes the measurement
+    bool auto_init;  ///< 为 true 时在构造函数中配置芯片
+    ///< When true, configure the chip in the constructor
+  };
+
+  /**
+   * @brief 构造 INA228，计算量纲系数；auto_init 为 true 时配置芯片并阻塞重试直到成功。
+   *        Construct INA228 and compute the scale factors; when auto_init is true,
+   *        configure the chip and retry, blocking, until it succeeds.
+   *
+   * @param i2c INA228 所在的 I2C。
+   *            I2C bus of the INA228.
+   * @param param 配置参数。
+   *              Configuration parameters.
+   */
+  INA228(LibXR::I2C& i2c, const Param& param = {.i2c_addr = 64,
+                                                .shunt_resistor_uohm = 5000,
+                                                .adcrange_div4 = false,
+                                                .sample_interval_ms = 100,
+                                                .data_topic_name = "ina228_data",
+                                                .auto_init = true})
+      : i2c_addr_(static_cast<uint16_t>(param.i2c_addr & 0x7Fu)),
+        shunt_resistor_uohm_(param.shunt_resistor_uohm == 0 ? 5000
+                                                            : param.shunt_resistor_uohm),
+        adcrange_div4_(param.adcrange_div4),
+        sample_interval_ms_(param.sample_interval_ms == 0 ? 1 : param.sample_interval_ms),
+        topic_data_(LibXR::Topic::CreateTopic<Data>(param.data_topic_name)),
+        i2c_(std::addressof(i2c)),
         op_read_block_(sem_i2c_),
         op_write_block_(sem_i2c_)
   {
@@ -68,7 +108,7 @@ class INA228 : public LibXR::Application
     energy_lsb_j_ = (CURRENT_LSB_UA_BASE * 3.2f) * 1.0e-6f;
     charge_lsb_c_ = (CURRENT_LSB_UA_BASE / 16.0f) * 1.0e-6f;
 
-    if (auto_init)
+    if (param.auto_init)
     {
       // 构造阶段阻塞重试初始化，失败时软复位后重新探活 / Retry initialization
       // in the constructor; soft-reset and probe again after a failed attempt.
@@ -83,13 +123,14 @@ class INA228 : public LibXR::Application
         LibXR::Thread::Sleep(10);
       }
     }
-
-    // 注册到应用管理器，后续由 OnMonitor 周期采样 / Register to the application
-    // manager for periodic sampling in OnMonitor.
-    app.Register(*this);
   }
 
-  void OnMonitor() override
+  /**
+   * @brief 监控回调：距上次采样不少于 sample_interval_ms 时读取芯片并发布测量结果。
+   *        Monitor callback: when at least sample_interval_ms has passed since the last
+   *        sample, read the chip and publish the measurement.
+   */
+  void OnMonitor()
   {
     const uint32_t NOW_MS = static_cast<uint32_t>(LibXR::Timebase::GetMilliseconds());
     if ((NOW_MS - last_sample_ms_) < sample_interval_ms_)
@@ -104,8 +145,22 @@ class INA228 : public LibXR::Application
     topic_data_.Publish(data_);
   }
 
+  /**
+   * @brief 获取最近一次采样。
+   *        Get the last sample.
+   *
+   * @return 最近一次采样的引用。
+   *         Reference to the last sample.
+   */
   const Data& GetData() const { return data_; }
 
+  /**
+   * @brief 写入 CONFIG、ADC_CONFIG 和 SHUNT_CAL。
+   *        Write CONFIG, ADC_CONFIG and SHUNT_CAL.
+   *
+   * @return 全部写入成功返回 true。
+   *         True when all writes succeed.
+   */
   bool ConfigureDevice()
   {
     const uint16_t CONFIG = adcrange_div4_ ? CONFIG_ADCRANGE : 0u;
@@ -127,6 +182,13 @@ class INA228 : public LibXR::Application
     return true;
   }
 
+  /**
+   * @brief 清零能量与电荷累加器。
+   *        Clear the energy and charge accumulators.
+   *
+   * @return 读写 CONFIG 均成功返回 true。
+   *         True when reading and writing CONFIG both succeed.
+   */
   bool ResetAccumulators()
   {
     uint16_t config = 0;
