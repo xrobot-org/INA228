@@ -4,7 +4,7 @@
 
 ## 1. 模块作用 / Purpose
 
-INA228 配置芯片，并在 `OnMonitor()` 中采样分流电压、总线电压、电流、功率、能量、电荷和芯片温度，再把测量结果发布到 Topic。采样在 `OnMonitor()` 中进行，模块不创建线程。
+INA228 配置芯片，并在 `OnMonitor()` 中采样分流电压、总线电压、电流、功率、能量、电荷和芯片温度，再把测量结果发布到 Topic。
 
 `auto_init` 为 `true` 时，构造函数写入 `CONFIG`（ADC 量程）、`ADC_CONFIG`（`0xFB68`：总线、分流和温度连续转换，每项 1052 µs，无平均）和固定的 `SHUNT_CAL`（`0x1000`）。失败时软复位芯片，每 100 ms 重试，在构造函数中阻塞直到成功。`auto_init` 为 `false` 时构造函数不访问芯片，由 `ConfigureDevice()` 完成配置。
 
@@ -18,7 +18,7 @@ INA228 配置芯片，并在 `OnMonitor()` 中采样分流电压、总线电压�
 - `bool ConfigureDevice()`：写入 `CONFIG`、`ADC_CONFIG` 和 `SHUNT_CAL`。
 - `bool ResetAccumulators()`：清零能量与电荷累加器。
 
-INA228 configures the chip, samples the shunt voltage, bus voltage, current, power, energy, charge and die temperature in `OnMonitor()`, and publishes the measurement to a Topic. Sampling runs in `OnMonitor()`; the Module creates no thread.
+INA228 configures the chip, samples the shunt voltage, bus voltage, current, power, energy, charge and die temperature in `OnMonitor()`, and publishes the measurement to a Topic.
 
 With `auto_init` set to `true`, the constructor writes `CONFIG` (ADC range), `ADC_CONFIG` (`0xFB68`: continuous bus, shunt and temperature conversion, 1052 µs each, no averaging) and a fixed `SHUNT_CAL` of `0x1000`. On failure it soft-resets the chip and retries every 100 ms, blocking in the constructor until it succeeds. With `auto_init` set to `false`, the constructor does not access the chip and `ConfigureDevice()` performs the configuration.
 
@@ -83,7 +83,7 @@ INA228(LibXR::I2C& i2c,
 - `i2c_addr`：7 位器件地址，不含读写位，默认 64（`0x40`）。
 - `shunt_resistor_uohm`：分流电阻，单位 µΩ，默认 5000（5 mΩ）；0 按 5000 处理。
 - `adcrange_div4`：为 `true` 时选择 ±40.96 mV 的 ADC 量程，否则为 ±163.84 mV，默认 `false`。
-- `sample_interval_ms`：两次采样的最小间隔，单位 ms，默认 100；0 按 1 处理。实际采样频率同时受 monitor 循环周期限制。
+- `sample_interval_ms`：两次采样的最小间隔，单位 ms，默认 100；0 按 1 处理。实际采样频率同时受 monitor 循环周期限制，该周期由配置中的 `settings.monitor_sleep_ms` 设定，默认 1000 ms。
 - `data_topic_name`：发布的 Topic 名称，默认 `"ina228_data"`。
 - `auto_init`：为 `true` 时在构造函数中配置芯片，默认 `true`。
 
@@ -96,7 +96,7 @@ Configuration parameters (`Param`):
 - `i2c_addr`: 7-bit device address without the R/W bit, default 64 (`0x40`).
 - `shunt_resistor_uohm`: shunt resistance in µΩ, default 5000 (5 mΩ); 0 is treated as 5000.
 - `adcrange_div4`: when `true`, the ±40.96 mV ADC range is selected, otherwise ±163.84 mV, default `false`.
-- `sample_interval_ms`: minimum interval between two samples in ms, default 100; 0 is treated as 1. The actual sample rate is also bounded by the monitor loop period.
+- `sample_interval_ms`: minimum interval between two samples in ms, default 100; 0 is treated as 1. The actual sample rate is also bounded by the monitor loop period, which is set by `settings.monitor_sleep_ms` in the configuration, 1000 ms by default.
 - `data_topic_name`: name of the published Topic, default `"ina228_data"`.
 - `auto_init`: when `true`, the chip is configured in the constructor, default `true`.
 
